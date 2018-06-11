@@ -1,4 +1,22 @@
+# mirtCAT 1.7
+
+- message added in red whenever selection conditions not met (e.g., when using forced choice, rating
+  scale options, or new mastery input)
+
+- added an optioanl `Mastery` input colum to `df` to prevent the GUI from continuing until
+  the item is answered correctly (not useful for CATs, but supported for teaching interfaces)
+
+- added a `rankselect` GUI input to `df$Type` to create a list of rank-orded selection options
+  corresponding to the input options
+
+- Fix bug when using sequentially scored test without forced choice (reported by Aron Fink)
+
 # mirtCAT 1.6
+
+- add `Timer` option to `df` intput to set time limits for select items
+
+- iterative algorithms now use the previous `theta` estimates as the starting values when locating
+  the updated estimates
 
 - fix selection bug when using prior covariance matrix selection rules (reported by Johan Braeken)
 

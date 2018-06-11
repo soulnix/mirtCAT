@@ -1,16 +1,18 @@
 .MCE <- new.env(parent=emptyenv())
 .MCE$complete <- TRUE
+.MCE$prevClick <- as.integer(NA)
 
 FI <- function(mirt_item, Theta){
     .Call('ItemInfo', mirt_item, Theta)
 }
 
-getAcovs <- function(possible_patterns, method, test, design){
+getAcovs <- function(possible_patterns, thetas, method, test, design){
     ret <- fscores(test@mo, return.acov = TRUE, 
                    method = method, response.pattern = possible_patterns, mirtCAT=TRUE,
                    rotate = test@fscores_args$rotate, theta_lim = test@fscores_args$theta_lim,
                    mean = test@fscores_args$mean, cov = test@fscores_args$cov, 
-                   MI = test@fscores_args$MI, quadpts = test@quadpts)
+                   MI = test@fscores_args$MI, quadpts = test@quadpts, 
+                   max_theta = test@fscores_args$max_theta, start = thetas)
     ret <- lapply(ret, function(x, pick){
         x <- try(x[pick, pick, drop=FALSE])
         return(x)
@@ -106,7 +108,8 @@ integrate.xy <- function(x,fx, a,b, use.spline = TRUE, xtol = 2e-8)
     r/2
 }
 
-buildShinyElements <- function(questions, itemnames, customTypes, choiceNames, choiceValues){
+buildShinyElements <- function(questions, itemnames, customTypes, choiceNames, choiceValues,
+                               default = NULL){
     J <- length(questions$Type)
     if(!all(sapply(questions[names(questions) != 'Rendered_Question'], is.character))) 
         stop('Only character classes are supported in questions input', call.=FALSE)
@@ -117,7 +120,7 @@ buildShinyElements <- function(questions, itemnames, customTypes, choiceNames, c
     if(is.null(Qs_char) && !any(questions$Type == 'slider')) 
         stop('Question column not specified', call.=FALSE)
     if(is.null(Type)) stop('Type column not specified', call.=FALSE)
-    if(!all(Type %in% c('radio', 'select', 'text', 'textArea', 'slider', 'checkbox', 'none',
+    if(!all(Type %in% c('radio', 'select', 'text', 'textArea', 'slider', 'checkbox', 'rankselect', 'none',
                         names(customTypes))))
         stop('Type input in shiny_questions contains invalid arguments', call.=FALSE)
     Qs <- vector('list', J)
@@ -139,19 +142,22 @@ buildShinyElements <- function(questions, itemnames, customTypes, choiceNames, c
             width <- questions$width[i]
             Qs[[i]] <- radioButtons(inputId = itemnames[i], label='',
                                     inline = inline, width = width,
-                                    choices = cs, selected = '', 
+                                    choices = cs, 
+                                    selected = if(is.null(default)) '' else default, 
                                     choiceNames=cNs, choiceValues=cVs)
         } else if(Type[i] == 'select'){
             cs <- c('', choices[i, !is.na(choices[i, ])])
             choices_list[[i]] <- cs
             width <- questions$width[i]
             size <- questions$size[i]
-            Qs[[i]] <- selectInput(inputId = itemnames[i], label='', selected = '', 
+            Qs[[i]] <- selectInput(inputId = itemnames[i], label='', 
+                                   selected = if(is.null(default)) '' else default, 
                                     choices = cs, width=width, size=size)
         } else if(Type[i] == 'text'){
             width <- questions$width[i]
             placeholder <- questions$placeholder[i]
-            Qs[[i]] <- textInput(inputId = itemnames[i], label='', value = '',
+            Qs[[i]] <- textInput(inputId = itemnames[i], label='', 
+                                 value = if(is.null(default)) '' else default,
                                  width=width, placeholder=placeholder)
         } else if(Type[i] == 'textArea'){
             width <- questions$width[i]
@@ -160,9 +166,10 @@ buildShinyElements <- function(questions, itemnames, customTypes, choiceNames, c
             rows <- questions$rows[i]
             resize <- questions$resize[i]
             placeholder <- questions$placeholder[i]
-            Qs[[i]] <- textAreaInput(inputId = itemnames[i], label='', value = '',
-                                 width=width, height=height, placeholder=placeholder,
-                                 cols=cols, rows=rows, resize=resize)
+            Qs[[i]] <- textAreaInput(inputId = itemnames[i], label='', 
+                                     value = if(is.null(default)) '' else default,
+                                     width=width, height=height, placeholder=placeholder,
+                                     cols=cols, rows=rows, resize=resize)
         } else if(Type[i] == 'slider'){
             if(is.null(questions$min) || is.null(questions$max) || is.null(questions$step))
                 stop('slider Type requires a min, max, and step column element in the df object', call.=FALSE)
@@ -176,7 +183,8 @@ buildShinyElements <- function(questions, itemnames, customTypes, choiceNames, c
             PRE <- questions$pre[i]
             POST <- questions$post[i]
             Qs[[i]] <- sliderInput(inputId = itemnames[i], label='', min = MIN, max = MAX,
-                                   value = VALUE, step = STEP, round = ROUND, width = WIDTH,
+                                   value = if(is.null(default)) VALUE else default, 
+                                   step = STEP, round = ROUND, width = WIDTH,
                                    ticks = TICKS, pre = PRE, post = POST)
             choices_list[[i]] <- as.character(seq(from=MIN, to=MAX, by=STEP))
         } else if(Type[i] == 'checkbox'){
@@ -193,11 +201,27 @@ buildShinyElements <- function(questions, itemnames, customTypes, choiceNames, c
             inline <- if(is.null(questions$inline[i])) FALSE else as.logical(questions$inline[i])
             Qs[[i]] <- checkboxGroupInput(inputId = itemnames[i], label='', choices = cs,
                                           width=width, inline=inline, choiceNames=cNs, choiceValues=cVs)
+        } else if(Type[i] == 'rankselect'){
+            opts <- as.character(choices[i, !is.na(choices[i, ])])
+            cs <- c("", as.character(1L:length(opts)))
+            choices_list[[i]] <- cs
+            width <- questions$width[i]
+            size <- questions$size[i]
+            out <- vector('list', length(choices_list[[i]]) - 1L)
+            for(j in seq_along(out))
+                out[[j]] <- selectInput(inputId = if(j>1) paste0(itemnames[i], "_", j) else itemnames[i], 
+                                        label=paste0(opts[j], ":"), 
+                                        selected = if(is.null(default)) '' else default, 
+                                        choices = cs, width=width, size=size)
+            Qs[[i]] <- out
         } else if(Type[i] %in% names(customTypes)){
             nm <- names(customTypes)[names(customTypes) == Type[i]]
             df_row <- as.data.frame(lapply(questions, function(x, ind) x[[ind]], ind=i), 
                                     stringsAsFactors = FALSE)
             df_row$Rendered_Question <- NULL
+            # TODO default is a problem if the timer re-evaluates the expression
+            if(!is.null(default)) 
+                stop('Internal error throw for customTypes with timer', call. = FALSE)
             Qs[[i]] <- customTypes[[nm]](inputId = itemnames[i], df_row=df_row)
         } else if(Type[i] == 'none'){
             next
@@ -238,13 +262,14 @@ formatTime <- function(delta){
 
 last_item <- function(items_answered) items_answered[max(which(!is.na(items_answered)))]
 
-# TODO this can be modified to accept other info 
+# TODO this can be modified to accept other info (as well as 'start')
 possible_pattern_thetas <- function(possible_patterns, test, method = 'EAP'){
     suppressWarnings(tmp <- fscores(test@mo, method = method, 
                                     response.pattern = possible_patterns, theta_lim = test@fscores_args$theta_lim, 
                                     MI = test@fscores_args$MI, quadpts = test@quadpts, 
                                     mean = test@fscores_args$mean, cov = test@fscores_args$cov, 
-                                    QMC = test@fscores_args$QMC, custom_den = test@fscores_args$custom_den))
+                                    QMC = test@fscores_args$QMC, custom_den = test@fscores_args$custom_den,
+                                    max_theta = test@fscores_args$max_theta))
     tmp
 }
 

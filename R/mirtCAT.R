@@ -30,7 +30,9 @@
 #'     \item{\code{Type}}{Indicates the type of response input 
 #'       to use from the shiny package. The supported types are: \code{'radio'} for radio buttons 
 #'       (\code{\link{radioButtons}}), \code{'select'} for a pull-down box for selecting 
-#'       inputs (\code{\link{selectInput}}), \code{'text'} and \code{'textArea'} for requiring 
+#'       inputs (\code{\link{selectInput}}), \code{'rankselect'} for a set of pull-down boxes rank-ordering
+#'       inputs (\code{\link{selectInput}}) associated with each option supplied, 
+#'       \code{'text'} and \code{'textArea'} for requiring 
 #'       typed user input (\code{\link{textInput}} and \code{\link{textAreaInput}}), 
 #'       \code{'checkbox'} for allowing multiple 
 #'       responses to be checked off (\code{\link{checkboxGroupInput}}),
@@ -79,6 +81,16 @@
 #'     \item{\code{StemExpression}}{(Optional) a logical vector indicating which \code{Question}
 #'       elements should be evaluated first in R. }
 #'       
+#'     \item{\code{Timer}}{(Optional) a numeric vector indicating a time limit (in seconds) 
+#'       for each respective item. If a response is not provided before this limit then the question
+#'       will automatically advance to the next selected item. The values \code{NA} and \code{Inf}
+#'       indicate no time limit for the respective items. Note that this option can only be used 
+#'       when \code{shinyGUI = list(forced_choice = FALSE)}}
+#'       
+#'     \item{\code{Mastery}}{(Optional) a logical vector indicating whether the item must be mastered
+#'       prior to continuing. Naturally, this requires that one or more \code{Answers} are provided,
+#'       or suitable functions for scoring are supplied}
+#'       
 #'     \item{\code{...}}{In cases where \code{'slider'} inputs are used instead only 
 #'       the \code{Question} input is required along with (at minimum) a 
 #'       \code{min}, \code{max}, and \code{step} column. In rows where the \code{Type == 'slider'} the 
@@ -111,7 +123,7 @@
 #'   \code{'MPWI'} for maximum posterior weighted information, \code{'MEI'} for 
 #'   maximum expected information, and \code{'IKLP'} as well as \code{'IKL'} for the 
 #'   integration based Kullback-Leibler criteria with and without the prior density weight,
-#'   respectively, and their root-nitems administered weighted counter-parts, \code{'IKLn'} and 
+#'   respectively, and their root-n items administered weighted counter-parts, \code{'IKLn'} and 
 #'   \code{'IKLPn'}.
 #'   
 #'   Possible inputs for multidimensional adaptive tests include: \code{'Drule'} 
@@ -173,7 +185,7 @@
 #'   first before running the simulations in parallel? Setting to \code{TRUE} will ensure that 
 #'   using the cluster will be optimal every time a new \code{cl} is defined. Default is \code{TRUE}
 #'   
-#' @param customTypes an optional list input contaning functions for Designing Original Graphical Stimuli (DOGS).
+#' @param customTypes an optional list input containing functions for Designing Original Graphical Stimuli (DOGS).
 #'   DOGS elements in the input list must contain a unique name, and the item with which it is associated must be
 #'   declared in the a \code{df$Type} input. The functions defined must be of the form
 #'   
@@ -349,7 +361,11 @@
 #'     various internal elements from the required functional arguments
 #'   }
 #'   
-#'   \item{\code{constr_fun}}{a user-defined function of the form \code{function(design, person, test)} 
+#'   \item{\code{constr_fun}}{(WARNING: supplying this function will disable a number of the heuristic 
+#'     item selection constraints in the \code{constraints} list as a consequence; namely, all list options
+#'     except for \code{"not_scored"}).
+#'      
+#'     This argument contains an optional user-defined function of the form \code{function(design, person, test)} 
 #'     that returns a \code{data.frame} containing the left hand side, relationship, and right hand side
 #'     of the constraints for \code{\link{lp}}. 
 #'     Each row corresponds to a constraint, while the number of columns should be 
@@ -621,9 +637,13 @@
 #' 
 #' @references 
 #' 
+#' Chalmers, R., P. (2012). mirt: A Multidimensional Item Response Theory
+#' Package for the R Environment. \emph{Journal of Statistical Software, 48}(6), 1-29.
+#' \doi{10.18637/jss.v048.i06}
+#' 
 #' Chalmers, R. P. (2016). Generating Adaptive and Non-Adaptive Test Interfaces for 
 #' Multidimensional Item Response Theory Applications. \emph{Journal of Statistical Software, 71}(5), 
-#' 1-39. doi:10.18637/jss.v071.i05
+#' 1-39. \doi{10.18637/jss.v071.i05}
 #' 
 #' @keywords CAT, MCAT, computerized adaptive testing
 #' 

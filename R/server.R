@@ -81,15 +81,28 @@ server <- function(input, output, session) {
         }
         
         # run survey
-        if(click > 2L && !.MCE$design@stop_now){
+        outmessage <- HTML("<p style='color:red;'> <em>Please provide a suitable response.</em> </p>")
+        if(click > 2L && !.MCE$design@stop_now && !.MCE$STOP){
             if(itemclick >= 1L){
                 pick <- .MCE$person$items_answered[itemclick]
                 name <- .MCE$test@itemnames[pick]
                 ip <- unname(input[[name]])
-                if(.MCE$shinyGUI$df$Type[pick] == 'select' && .MCE$shinyGUI$forced_choice && ip == "")
+                if(.MCE$shinyGUI$df$Type[pick] %in% c('select', 'rankselect') && .MCE$shinyGUI$forced_choice && ip == "")
                     ip <- NULL
-                if(is.null(ip)) ip <- input[[paste0(.MCE$invalid_count, '.TeMpInTeRnAl',name)]]
-                if(!is.null(ip)){
+                if(.MCE$invalid_count > 0L)
+                    ip <- input[[paste0(.MCE$invalid_count, '.TeMpInTeRnAl',name)]]
+                if(!is.null(ip) && .MCE$prevClick != click && .MCE$shinyGUI$df$Type[pick] == "rankselect"){
+                    nopts <- length(.MCE$test@item_options[[pick]]) - 1L
+                    for(opt in 2L:nopts){
+                        if(.MCE$invalid_count > 0L) ip <- c(ip, input[[paste0(.MCE$invalid_count, '.TeMpInTeRnAl',name,"_", opt)]])
+                        else ip <- c(ip, input[[paste0(name, "_", opt)]])
+                    }
+                    if(length(ip) != length(unique(ip))){
+                        outmessage <- HTML("<p style='color:red;'><em>Please provide unique rankings for each response.</em></p>")
+                        ip <- NULL
+                    } 
+                }
+                if(!is.null(ip) && .MCE$prevClick != click){
                     ip <- as.character(ip)
                     nanswers <- length(ip)
                     .MCE$person$raw_responses[pick] <- paste0(ip, collapse = '; ')
@@ -107,6 +120,26 @@ server <- function(input, output, session) {
                             else .MCE$person$responses[pick] <- as.integer(ip %in% .MCE$test@item_answers[[pick]])
                         } 
                     }
+                    if(!is.null(.MCE$shinyGUI$df$Mastery)){
+                        mastery <- as.logical(.MCE$shinyGUI$df$Mastery[pick])
+                        if(mastery && .MCE$person$responses[pick] == 0L){
+                            outmessage <- HTML("<p style='color:red;'><em>The answer provided was incorrect. Please select an alternative.</em></p>")
+                            .MCE$shift_back <- .MCE$shift_back + 1L
+                            .MCE$invalid_count <- .MCE$invalid_count + 1L
+                            tmp <- lapply(.MCE$shinyGUI$df, function(x, pick) x[pick], pick=pick)
+                            tmp <- buildShinyElements(questions=tmp, customTypes=.MCE$shinyGUI$customTypes, 
+                                                      itemnames=paste0(.MCE$invalid_count, '.TeMpInTeRnAl', name),
+                                                      choiceNames=.MCE$shinyGUI$choiceNames[pick],
+                                                      choiceValues=.MCE$shinyGUI$choiceValues[pick],
+                                                      default = ip)
+                            stemOutput <- stemContent(pick)
+                            .MCE$prevClick <- click
+                            return(list(stemOutput, 
+                                        .MCE$shinyGUI$df$Rendered_Question[[pick]], 
+                                        tmp$questions, outmessage))
+                        }
+                    }
+                    
                     .MCE$person$item_time[pick] <- proc.time()[3L] - .MCE$start_time
                     .MCE$start_time <- NULL
                     
@@ -119,16 +152,21 @@ server <- function(input, output, session) {
                 } else {
                     if(.MCE$shinyGUI$time_before_answer >= (proc.time()[3L] - .MCE$start_time) || 
                        (.MCE$shinyGUI$forced_choice && .MCE$shinyGUI$df$Type[pick] != 'none')){
+                        if(.MCE$shinyGUI$time_before_answer >= (proc.time()[3L] - .MCE$start_time))
+                            outmessage <- NULL
                         .MCE$shift_back <- .MCE$shift_back + 1L
                         .MCE$invalid_count <- .MCE$invalid_count + 1L
                         tmp <- lapply(.MCE$shinyGUI$df, function(x, pick) x[pick], pick=pick)
                         tmp <- buildShinyElements(questions=tmp, customTypes=.MCE$shinyGUI$customTypes, 
                                                   itemnames=paste0(.MCE$invalid_count, '.TeMpInTeRnAl', name),
                                                   choiceNames=.MCE$shinyGUI$choiceNames[pick],
-                                                  choiceValues=.MCE$shinyGUI$choiceValues[pick])
+                                                  choiceValues=.MCE$shinyGUI$choiceValues[pick],
+                                                  default = ip)
                         stemOutput <- stemContent(pick)
-                        return(list(stemOutput, .MCE$shinyGUI$df$Rendered_Question[[pick]], 
-                                    tmp$questions))
+                        .MCE$prevClick <- click
+                        return(list(stemOutput, 
+                                    .MCE$shinyGUI$df$Rendered_Question[[pick]], 
+                                    tmp$questions, outmessage))
                     } else {
                         .MCE$person$item_time[pick] <- proc.time()[3L] - .MCE$start_time
                         .MCE$start_time <- NULL
@@ -143,12 +181,14 @@ server <- function(input, output, session) {
                 }
             } 
             
+            .MCE$invalid_count <- 0
             .MCE$design <- Next.stage(.MCE$design, person=.MCE$person, test=.MCE$test, item=itemclick)
             
             if(!.MCE$design@stop_now){
                 item <- if(all(is.na(.MCE$person$items_answered))) .MCE$design@start_item
                     else findNextCATItem(person=.MCE$person, test=.MCE$test, 
                                         design=.MCE$design, start=FALSE)
+                .MCE$item <- item
                 if(!is.null(attr(item, 'design'))) .MCE$design <- attr(item, 'design')
                 if(is.na(item)){
                     .MCE$design@stop_now <- TRUE
@@ -159,6 +199,9 @@ server <- function(input, output, session) {
                     if(.MCE$shinyGUI$temp_file != '')
                         saveRDS(.MCE$person, .MCE$shinyGUI$temp_file)
                     stemOutput <- stemContent(item)
+                    .MCE$prevClick <- click
+                    if(!is.na(.MCE$shinyGUI$timer[item]))
+                        invalidateLater(.MCE$shinyGUI$timer[item] * 1000)
                     return(list(stemOutput, 
                                 .MCE$shinyGUI$df$Rendered_Question[[item]], 
                                 .MCE$shinyGUI$questions[[item]]))

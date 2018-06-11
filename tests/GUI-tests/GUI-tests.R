@@ -10,13 +10,19 @@ questions <- c("Building CATs with mirtCAT is difficult.",
                "mirtCAT requires a substantial amount of coding.",
                "I would use mirtCAT in my research.")
 df <- data.frame(Question = questions, Option = options, Type = "radio")
-# df$Answer <- NA
-# df$Answer[1] <- 'Agree'
 
 # forced
 results <- mirtCAT(df = df)
 summary(results)
 results <- mirtCAT(df = df, shinyGUI = list(stopApp = FALSE))
+
+# correct answer scoring
+df2 <- df
+df2$Answer <- c('Agree', 'Agree', 'Agree')
+df2$Mastery <- c(TRUE, FALSE, FALSE)
+results <- mirtCAT(df = df2)
+summary(results)
+
 
 #theme
 results <- mirtCAT(df = df, shinyGUI = list(theme = 'journal'))
@@ -35,6 +41,10 @@ results <- mirtCAT(df = df, shinyGUI = list(css = css))
 # select input
 df2 <- df
 df2$Type[1] <- 'select'
+results <- mirtCAT(df = df2)
+
+df2 <- df
+df2$Type[1] <- 'rankselect'
 results <- mirtCAT(df = df2)
 
 # width/inline change
